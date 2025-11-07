@@ -130,7 +130,7 @@ pub fn create_icmp_packet(icmp_type: u8, icmp_code: u8, icmp_data:String, identi
     Ok(icmp_packet)
 }
 
-fn create_icmp_checksum(for_checksum_vec:Vec<u16>)->Result<u16,String>{
+pub fn create_icmp_checksum(for_checksum_vec:Vec<u16>)->Result<u16,String>{
 
     let mut sum:u32 = 0;
     for_checksum_vec.into_iter().for_each(|tmp|{

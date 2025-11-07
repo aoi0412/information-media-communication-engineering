@@ -57,7 +57,7 @@ fn main()-> Result<(), Box<dyn std::error::Error>> {
                     // ICMPパケットのみに絞る
                     let receive_protocol = ipv4_packet_data.get_next_level_protocol();
                     if receive_protocol == IpNextHeaderProtocols::Icmp {
-
+                    
                         // Echo Replyかつ識別子が送信パケットと同じもののみに絞る
                         let receive_icmp_type = receive_payload[0];
                         let receive_icmp_identification = u16::from_be_bytes([receive_payload[4],receive_payload[5]]);
