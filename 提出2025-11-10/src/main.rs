@@ -6,7 +6,6 @@ use pnet::transport::ipv4_packet_iter;
 
 
 fn main()-> Result<(), Box<dyn std::error::Error>> {
-    let mode:&str = "detail"; // detail or simple
     // 引数にIPv4アドレスを受け取る＆IPv4形式かどうかを確認
     let ipaddress = std::env::args().nth(1).expect("no send ip address given");
     let destination_ipv4 = createpacket::check_ipv4_address(&ipaddress)?;
@@ -22,44 +21,30 @@ fn main()-> Result<(), Box<dyn std::error::Error>> {
     // 3. パケットの受信
     // 4. パケットの解析
     for icmp_seq in 0..ping_exec_num {
-        if mode == "detail"{
-            println!("----- パケット生成&送信 -----\n");
-        }
+        // Echo Requestパケットを生成
+        println!("----- パケット生成&送信 -----\n");
         // パケットのヘッダーに使う識別子を生成
         let mut rng = rng();
         let identification: u16 = rng.random();
-
-        if mode == "detail" {
-            println!("識別子：{}\n",identification);
-        }
-
-        // Echo Requestパケットを生成
-        let icmp_echo_request_packet = createpacket::create_icmp_packet(8,0,String::from("test"),identification,icmp_seq as u16, mode)?;
+        println!("識別子：{}\n",identification);
+        let icmp_echo_request_packet = createpacket::create_icmp_packet(8,0,String::from("test"),identification,icmp_seq as u16)?;
 
         // 宛先IPから送り元IPを取得（UDPを使用）
         let source_ipv4 = createpacket::get_source_ipv4(destination_ipv4)?;
 
-        // IPv4パケットを生成
-        let ipv4_packet = createpacket::create_ipv4_packet(destination_ipv4, source_ipv4, identification, icmp_echo_request_packet, mode)?;
+        // pnetクレートを使ってIPv4パケットを生成
+        let ipv4_packet = createpacket::create_ipv4_packet(destination_ipv4, source_ipv4, identification, icmp_echo_request_packet)?;
 
         // socketを作成
         let (mut sender, mut receiver) = createpacket::create_socket()?;
 
         // パケットを送信（RTTの計測開始）
-        
         let start = Instant::now();
         createpacket::send_ipv4_packet(&mut sender, destination_ipv4, &ipv4_packet)?;
-
-        if mode == "detail"{
-            println!("-----------------------\n");
-        }else if mode == "simple" && icmp_seq == 0{
-            println!("PING {} ({}): {} data bytes", destination_ipv4, destination_ipv4, ipv4_packet.len())
-        }
+        println!("-----------------------\n");
 
         // パケットの受信を監視
-        if mode == "detail"{
-            println!("----- パケット受信 -----\n");
-        }
+        println!("----- パケット受信 -----\n");
         let mut iter = ipv4_packet_iter(&mut receiver);
         let deadline = Instant::now() + Duration::from_secs(1);
         let mut got_reply: bool = false;
@@ -67,7 +52,7 @@ fn main()-> Result<(), Box<dyn std::error::Error>> {
             match iter.next_with_timeout(Duration::from_millis(100))? {
                 Some((ipv4_packet_data, _ipaddr)) => {
 
-                    let result_analysis = createpacket::analysis_packet(ipv4_packet_data, start, identification, mode)?;
+                    let result_analysis = createpacket::analysis_packet(ipv4_packet_data, start, identification)?;
                     if result_analysis {
                         // パケット損失を加算
                         loss_count = loss_count + 1;
@@ -78,21 +63,14 @@ fn main()-> Result<(), Box<dyn std::error::Error>> {
             }
             if Instant::now() >= deadline {
                 if !got_reply {
-                    if mode == "detail"{
-                        println!("------------------- Timeout -------------------");
-                        println!("Request timeout for icmp_seq {}", icmp_seq);
-                        println!("-------------------------------------------------------");
-                    } else if mode == "simple"{
-                        println!("Request timeout for icmp_seq {}", icmp_seq);
-                    }
-                    
+                    println!("------------------- Timeout -------------------");
+                    println!("|Request timeout for icmp_seq {}", icmp_seq);
+                    println!("-------------------------------------------------------");
                 }
                 break;
             }
         }
-        if mode == "detail"{
-            println!("-----------------------\n\n\n");
-        }
+        println!("-----------------------\n\n\n");
     }
     
     let loss_rate = ((ping_exec_num - loss_count) as f32) / (ping_exec_num as f32) * 100.0;

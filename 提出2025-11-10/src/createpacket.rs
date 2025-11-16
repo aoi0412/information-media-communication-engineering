@@ -51,7 +51,7 @@ pub fn get_source_ipv4(destination_ipv4:Ipv4Addr)->Result<Ipv4Addr,String>{
     Ok(source_ipv4)
 }
 
-pub fn create_ipv4_packet(destination_ipv4:Ipv4Addr,source_ipv4:Ipv4Addr,identification:u16, payload: Vec<u8>, mode: &str) -> Result<Vec<u8>, String> {
+pub fn create_ipv4_packet(destination_ipv4:Ipv4Addr,source_ipv4:Ipv4Addr,identification:u16, payload: Vec<u8>) -> Result<Vec<u8>, String> {
     let header_len = 20;
     let mut ipv4_packet:Vec<u8> = Vec::<u8>::new();
 
@@ -101,22 +101,19 @@ pub fn create_ipv4_packet(destination_ipv4:Ipv4Addr,source_ipv4:Ipv4Addr,identif
         for_checksum_vec.push(tmp_u16);
     });
     // insert checksum
+    println!("↓IPv4ヘッダ");
     tmp_checksum = create_checksum(for_checksum_vec)?;
     ipv4_packet[checksum_frag1] = (tmp_checksum >> 8) as u8;
     ipv4_packet[checksum_frag2] = (tmp_checksum & 0xff) as u8;
-    if mode == "detail"{
-        println!("↓IPv4ヘッダ");
-        println!("送信パケット(IPv4ヘッダ):{:x?}", ipv4_packet);
-        println!("送信パケット(ICMPヘッダ):{:x?}", payload);
-    }
-
+    println!("送信パケット(IPv4ヘッダ):{:x?}", ipv4_packet);
 
     ipv4_packet.extend_from_slice(&payload);
+    println!("送信パケット(ICMPヘッダ):{:x?}", payload);
 
     Ok(ipv4_packet)
 }
 
-pub fn create_icmp_packet(icmp_type: u8, icmp_code: u8, icmp_data:String, identification:u16, icmp_seq:u16, mode: &str) -> Result<Vec<u8>,String>{
+pub fn create_icmp_packet(icmp_type: u8, icmp_code: u8, icmp_data:String, identification:u16, icmp_seq:u16) -> Result<Vec<u8>,String>{
     let mut for_checksum_vec = Vec::<u16>::new();
     let icmp_checksum: u16 = 0;
     let mut icmp_data:Vec<u8> = icmp_data.into_bytes();
@@ -144,12 +141,9 @@ pub fn create_icmp_packet(icmp_type: u8, icmp_code: u8, icmp_data:String, identi
         for_checksum_vec.push(tmp_u16);
     });
 
+    println!("↓ICMPヘッダ");
     let icmp_checksum = create_checksum(for_checksum_vec)?;
-    if mode == "detail"{
-        println!("↓ICMPヘッダ");
-        println!("チェックサム生成 → 0x{:x}\n", !(icmp_checksum as u16));
-    }
-    
+
     //// ICMPパケットを生成
     let mut icmp_packet:Vec<u8> = Vec::<u8>::new();
     icmp_packet.push(icmp_type);
@@ -174,7 +168,7 @@ pub fn create_checksum(for_checksum_vec:Vec<u16>)->Result<u16,String>{
         // 下位16桁を取り出して、取り出した16桁に上位16桁を足す
         sum = (sum & 0xffff) + (sum >> 16);
     }
-
+    println!("チェックサム生成 → 0x{:x}\n", !(sum as u16));
 
     // 反転したものを返す
     Ok(!(sum as u16))
@@ -185,15 +179,14 @@ pub fn create_socket()->Result<(TransportSender, TransportReceiver),String>{
     Ok((sender, receiver))
 }
 
-pub fn send_ipv4_packet(sender:&mut TransportSender,destination_ipv4:Ipv4Addr,ipv4_packet:&[u8])->Result<()
-,String>{
+pub fn send_ipv4_packet(sender:&mut TransportSender,destination_ipv4:Ipv4Addr,ipv4_packet:&[u8])->Result<(),String>{
     let send_packet = Ipv4Packet::new(ipv4_packet)
         .ok_or_else(|| "invalid IPv4 bytes".to_string())?;
     sender.send_to(send_packet, IpAddr::V4(destination_ipv4)).map_err(|e| format!("send failed: {e}"))?;
     Ok(())
 }
 
-pub fn check_checksum(for_checksum_vec:Vec<u8>)->Result<u32, String>{
+pub fn check_checksum(for_checksum_vec:Vec<u8>)->Result<(), String>{
     let mut sum:u32 = 0;
     for_checksum_vec.chunks(2).for_each(|chunk| {
         let tmp_u16: u16 = if chunk.len() == 2 {
@@ -208,16 +201,17 @@ pub fn check_checksum(for_checksum_vec:Vec<u8>)->Result<u32, String>{
         // 下位16桁を取り出して、取り出した16桁に上位16桁を足す
         sum = (sum & 0xffff) + (sum >> 16);
     }
-
+    println!("チェックサム検証 → 0x{:x}\n",sum);
     if sum == 0xffff{
-        Ok(sum)
+        Ok(())
     }else{
+        
         println!("チェックサムの検証に失敗しました");
-        Ok(sum)
+        Ok(())
     }
 }
 
-pub fn analysis_packet(ipv4_packet_data: Ipv4Packet<'_>, start: Instant, identification: u16, mode: &str) -> Result<bool, String> {
+pub fn analysis_packet(ipv4_packet_data: Ipv4Packet<'_>, start: Instant, identification: u16) -> Result<bool, String> {
     // IPv4パケットヘッダの「total_length」が実際のものと相違があるため、get_payload()を使わずに手動でペイロードを取り出す
     let receive_bytes = ipv4_packet_data.packet();
     let receive_header_length = (ipv4_packet_data.get_header_length() * 4) as usize;
@@ -227,36 +221,24 @@ pub fn analysis_packet(ipv4_packet_data: Ipv4Packet<'_>, start: Instant, identif
     if receive_icmp_identification != identification {
         return Ok(false)
     }
-
-    if mode == "detail"{
-        println!("受信パケット(IPv4ヘッダ):{:x?}", receive_ipv4_header);
-        println!("受信パケット(ICMPヘッダ):{:x?}", receive_payload);
-    }
+    println!("受信パケット(IPv4ヘッダ):{:x?}", receive_ipv4_header);
+    println!("受信パケット(ICMPヘッダ):{:x?}", receive_payload);
     
 
     // 応急処置としてパケット長を上書き
     let mut fixed_ipv4_header = receive_ipv4_header.to_vec();
-    let truth_total_length:usize = receive_bytes.len();
-    let [b2, b3] = (truth_total_length as u16).to_be_bytes();
+    let [b2, b3] = (32u16).to_be_bytes();
     if fixed_ipv4_header.len() >= 4 {
         fixed_ipv4_header[2] = b2;
         fixed_ipv4_header[3] = b3;
     }
-    if mode == "detail"{
-        println!("受信パケットを修正(パケット長→32):{:x?}\n", fixed_ipv4_header);
+    println!("受信パケットを修正(パケット長→32):{:x?}\n", fixed_ipv4_header);
 
-    }
-    
-    let ipv4_sum = check_checksum(fixed_ipv4_header)?;
-    // check_checksum(receive_ipv4_header.to_vec())?;
-    let icmp_sum = check_checksum(receive_payload.to_vec())?;
-
-    if mode == "detail"{
-        println!("↓IPv4ヘッダ");
-        println!("チェックサム検証 → 0x{:x}\n",ipv4_sum);
-        println!("↓ICMPヘッダ");
-        println!("チェックサム検証 → 0x{:x}\n",icmp_sum);
-    }
+    println!("↓IPv4ヘッダ");
+    // check_checksum(fixed_ipv4_header)?;
+    check_checksum(receive_ipv4_header.to_vec())?;
+    println!("↓ICMPヘッダ");
+    check_checksum(receive_payload.to_vec())?;
     
     
     // ICMPパケットのみに絞る
@@ -278,35 +260,27 @@ pub fn analysis_packet(ipv4_packet_data: Ipv4Packet<'_>, start: Instant, identif
         if receive_icmp_type == 0 {
             
             // 結果を出力
-            if mode == "detail"{
-                println!("↓ICMP Echo Reply");
-                print!("type = {} ", receive_icmp_type);
-                print!("code = {} ", receive_icmp_code);
-                print!("checksum =  {:#06x} ", receive_icmp_checksum);
-                print!("identification = {:#06x} ", receive_icmp_identification);
-                print!("seq = {} ", receive_icmp_seq);
-                println!("data = {} ", receive_icmp_data);
-                println!("time = {:.4} ms", ms);
-                println!("");
-            }else if mode == "simple"{
-                println!("{} bytes from {}: icmp_seq={} ttl={} time={} ms", truth_total_length, ipv4_packet_data.get_source(), receive_icmp_seq, ipv4_packet_data.get_ttl(), ms);
-            }
-            
+            println!("↓ICMP Echo Reply");
+            print!("type = {} ", receive_icmp_type);
+            print!("code = {} ", receive_icmp_code);
+            print!("checksum =  {:#06x} ", receive_icmp_checksum);
+            print!("identification = {:#06x} ", receive_icmp_identification);
+            print!("seq = {} ", receive_icmp_seq);
+            println!("data = {} ", receive_icmp_data);
+            println!("time = {:.4} ms", ms);
+            println!("");
             return Ok(true);
         } else {
             // 結果を出力
-            if mode == "detail"{
-                println!("↓ Failed ICMP Echo Reply");
-                print!("type = {} ", receive_icmp_type);
-                print!("code = {} ", receive_icmp_code);
-                print!("checksum =  {:#06x} ", receive_icmp_checksum);
-                print!("identification = {:#06x} ", receive_icmp_identification);
-                print!("seq = {} ", receive_icmp_seq);
-                println!("data = {} ", receive_icmp_data);
-                println!("time = {:.4} ms", ms);
-                println!("");
-            }
-            
+            println!("↓ Failed ICMP Echo Reply");
+            print!("type = {} ", receive_icmp_type);
+            print!("code = {} ", receive_icmp_code);
+            print!("checksum =  {:#06x} ", receive_icmp_checksum);
+            print!("identification = {:#06x} ", receive_icmp_identification);
+            print!("seq = {} ", receive_icmp_seq);
+            println!("data = {} ", receive_icmp_data);
+            println!("time = {:.4} ms", ms);
+            println!("");
         };
     };
     Ok(false)
