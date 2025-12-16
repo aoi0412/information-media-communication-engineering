@@ -36,7 +36,7 @@ fn main()-> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Echo Requestパケットを生成
-        let icmp_echo_request_packet = utility::create_icmp_packet(8,0,String::from("test"),identification,icmp_seq as u16, mode)?;
+        let icmp_echo_request_packet = utility::create_icmp_packet(8,0,identification,icmp_seq as u16, mode)?;
 
         // 宛先IPから送り元IPを取得（UDPを使用）
         let source_ipv4 = utility::get_source_ipv4(destination_ipv4)?;
