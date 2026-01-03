@@ -1,0 +1,12 @@
+[package]
+name = "search-mtu"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libpcap = "0.1.7"
+rand = "0.9.2"
+
+
+[dependencies.utility]
+path = "../utility"

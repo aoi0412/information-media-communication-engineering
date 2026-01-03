@@ -338,13 +338,26 @@ fn send_packet(icmp_seq:u16, destination_ipv4: Ipv4Addr, ttl: u8)-> Result<(u16,
 
     // Echo Requestパケットを生成
     let start_instant = Instant::now();
-    let icmp_echo_request_packet = utility::create_icmp_packet(8,0,identification,icmp_seq, &mode)?;
+    let mut tmp_create_icmp_packet_args:utility::CreateIcmpPacketArgs = utility::CreateIcmpPacketArgs::default();
+    tmp_create_icmp_packet_args.icmp_type = 8;
+    tmp_create_icmp_packet_args.icmp_code = 0;
+    tmp_create_icmp_packet_args.identification = identification;
+    tmp_create_icmp_packet_args.icmp_seq = icmp_seq;
+    let icmp_echo_request_packet = utility::create_icmp_packet(tmp_create_icmp_packet_args)?;
 
     // 宛先IPから送り元IPを取得（UDPを使用）
     let source_ipv4 = utility::get_source_ipv4(destination_ipv4)?;
 
     // IPv4パケットを生成
-    let ipv4_packet = utility::create_ipv4_packet(destination_ipv4, source_ipv4, identification, ttl, icmp_echo_request_packet, &mode)?;
+    let mut tmp_create_ipv4_packet_args:utility::CreateIpv4PacketArgs = utility::CreateIpv4PacketArgs::default();
+    tmp_create_ipv4_packet_args.ttl = ttl;
+    tmp_create_ipv4_packet_args.source_ipv4 = source_ipv4;
+    tmp_create_ipv4_packet_args.destination_ipv4 = destination_ipv4;
+    tmp_create_ipv4_packet_args.identification = identification;
+    tmp_create_ipv4_packet_args.payload = icmp_echo_request_packet;
+
+
+    let ipv4_packet = utility::create_ipv4_packet(tmp_create_ipv4_packet_args)?;
 
     // socketを作成
     let (mut sender, _) = utility::create_socket()?;
